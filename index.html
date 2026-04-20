@@ -9,38 +9,52 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        .btn { background: #2563eb; color: white; border: none; padding: 15px; border-radius: 8px; width: 100%; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .btn { background: #2563eb; color: white; border: none; padding: 15px; border-radius: 10px; width: 100%; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.3s; }
+        .btn:hover { background: #1d4ed8; }
         input[type="file"] { margin: 20px 0; width: 100%; }
-        #adminArea { display: none; width: 100%; max-width: 800px; margin-top: 30px; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-        .price-display { font-size: 2.5rem; color: #1e293b; margin: 15px 0; font-weight: 800; }
+        #adminArea { display: none; width: 100%; max-width: 900px; margin-top: 20px; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; border-bottom: 2px solid #e2e8f0; }
+        td { padding: 15px; border-bottom: 1px solid #e2e8f0; }
+        .price-tag { font-size: 2.5rem; color: #1e293b; margin: 15px 0; font-weight: 800; }
+        .view-btn { background: #2563eb; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-right: 5px; }
+        .done-btn { background: #10b981; color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; }
     </style>
 </head>
 <body>
 
 <div class="card" id="userUI">
-    <h2>🖨️ Abhishek's Xerox</h2>
-    <p>Rate: ₹5 per page</p>
-    <input type="file" id="fileInput" accept=".pdf">
+    <h2 style="margin-bottom:5px;">🖨️ Abhishek's Xerox</h2>
+    <p style="color:#64748b;">Fast & Secure Cloud Printing</p>
+    <hr style="border: 0.5px solid #eee; margin: 20px 0;">
+    <p>Rate: <b>₹5 per page</b></p>
+    <input type="file" id="fileInput" accept=".pdf,image/*">
     <button class="btn" onclick="handleUpload()">Upload & Get Price</button>
-    <div id="status" style="margin-top:15px; color:#666;"></div>
+    <div id="status" style="margin-top:15px; color:#2563eb; font-weight: 600;"></div>
 </div>
 
 <div id="adminArea">
-    <h2>Live Print Queue (Admin)</h2>
+    <div style="display:flex; justify-content: space-between; align-items: center;">
+        <h2>📋 Live Print Queue</h2>
+        <span style="background:#dcfce7; color:#166534; padding:5px 12px; border-radius:20px; font-size:12px; font-weight:bold;">SHOP OPEN</span>
+    </div>
     <table>
         <thead>
-            <tr><th>Job ID</th><th>Pages</th><th>Amount</th><th>Action</th></tr>
+            <tr>
+                <th>Job ID</th>
+                <th>Pages</th>
+                <th>Amount</th>
+                <th>Actions</th>
+            </tr>
         </thead>
         <tbody id="queueBody"></tbody>
     </table>
 </div>
 
 <script>
-    // Your exact Firebase Config from the photo
+    // Your verified Firebase Configuration
     const firebaseConfig = {
         apiKey: "AIzaSyA_tUfBWwwKr9gBkVW2wYEEx_gzv2zAfkE",
         authDomain: "abhishek-s-xerox-shop.firebaseapp.com",
@@ -50,50 +64,62 @@
         appId: "1:121642464695:web:f8ef68ad367f505b40e432"
     };
 
-    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const storage = firebase.storage();
 
     async function handleUpload() {
         const file = document.getElementById('fileInput').files[0];
-        if (!file) return alert("Please select a PDF file!");
+        if (!file) return alert("Please select a file first!");
         
-        document.getElementById('status').innerText = "Reading pages...";
-        
-        const reader = new FileReader();
-        reader.onload = async function() {
-            const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
-            const pages = pdf.numPages;
-            const total = pages * 5; // Updated price: ₹5
-            const jobID = Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('status').innerText = "Processing file...";
+        let pages = 1;
 
-            document.getElementById('status').innerText = "Uploading...";
+        // If it's a PDF, count pages. If it's an image, count as 1.
+        if (file.type === "application/pdf") {
+            const reader = new FileReader();
+            reader.onload = async function() {
+                const pdf = await pdfjsLib.getDocument(new Uint8Array(this.result)).promise;
+                pages = pdf.numPages;
+                uploadFile(file, pages);
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            uploadFile(file, 1);
+        }
+    }
 
-            // Upload to Storage
+    async function uploadFile(file, pages) {
+        const total = pages * 5;
+        const jobID = Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('status').innerText = "Uploading to Cloud...";
+
+        try {
             const fileRef = storage.ref('prints/' + jobID + "_" + file.name);
             await fileRef.put(file);
             const url = await fileRef.getDownloadURL();
 
-            // Save to Firestore
             await db.collection("orders").add({
                 jobID, name: file.name, pages, total, url,
                 time: firebase.firestore.FieldValue.serverTimestamp()
             });
 
             document.getElementById('userUI').innerHTML = `
-                <div style="color:green">
-                    <h3>✅ Upload Successful!</h3>
-                    <p>Job ID: <b>#${jobID}</b></p>
-                    <div class="price-display">₹${total}</div>
-                    <p>Please pay cash at the counter to print.</p>
+                <div style="color:#1e293b">
+                    <h3 style="color:#10b981">✅ Ready to Print!</h3>
+                    <p>Tell the counter your Job ID:</p>
+                    <h2 style="background:#f1f5f9; padding:10px; border-radius:10px; display:inline-block;">#${jobID}</h2>
+                    <div class="price-tag">₹${total}</div>
+                    <p style="font-size:14px; color:#64748b;">Please pay cash and collect your prints.</p>
                     <button class="btn" style="background:#64748b" onclick="location.reload()">Upload Another</button>
                 </div>`;
-        };
-        reader.readAsArrayBuffer(file);
+        } catch (error) {
+            alert("Error: Please check if Firebase Rules are set to 'true'");
+            console.error(error);
+        }
     }
 
-    // Admin Dashboard Logic
+    // ADMIN PANEL LOGIC
     if(window.location.search.includes('view=admin')) {
         document.getElementById('userUI').style.display = 'none';
         document.getElementById('adminArea').style.display = 'block';
@@ -105,12 +131,12 @@
                 const data = doc.data();
                 body.innerHTML += `
                     <tr>
-                        <td>#${data.jobID}</td>
+                        <td><b>#${data.jobID}</b><br><small style="color:#94a3b8">${data.name.substring(0,15)}...</small></td>
                         <td>${data.pages}</td>
-                        <td><b>₹${data.total}</b></td>
+                        <td style="color:#10b981; font-weight:bold;">₹${data.total}</td>
                         <td>
-                            <a href="${data.url}" target="_blank" style="color:blue">Open File</a> | 
-                            <button onclick="deleteJob('${doc.id}', '${data.jobID}_${data.name}')">Finish</button>
+                            <button class="view-btn" onclick="window.open('${data.url}', '_blank')">👁️ View File</button>
+                            <button class="done-btn" onclick="deleteJob('${doc.id}', '${data.jobID}_${data.name}')">✅ Done</button>
                         </td>
                     </tr>`;
             });
@@ -118,7 +144,7 @@
     }
 
     async function deleteJob(id, fileName) {
-        if(confirm("Confirm payment received and file printed?")) {
+        if(confirm("Mark as printed and delete file?")) {
             await db.collection("orders").doc(id).delete();
             await storage.ref('prints/' + fileName).delete();
         }
