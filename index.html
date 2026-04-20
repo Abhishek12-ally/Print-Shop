@@ -1,4 +1,49 @@
-// Firebase Config
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abhishek's Xerox Shop</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; text-align: center; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        .btn { background: #2563eb; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        #adminArea { display: none; background: white; padding: 20px; border-radius: 15px; max-width: 800px; margin: 20px auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: left; }
+        .view-btn { background: #64748b; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .done-btn { background: #10b981; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="card" id="userUI">
+    <h2>🖨️ Abhishek's Xerox</h2>
+    <p>Rate: ₹5 per page</p>
+    <input type="file" id="fileInput">
+    <button class="btn" onclick="handleUpload()">Upload & Get Price</button>
+    <p id="status" style="color: #2563eb;"></p>
+</div>
+
+<div id="adminArea">
+    <h2>📋 Live Print Queue</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Job ID</th>
+                <th>Pages</th>
+                <th>Total</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="queueBody"></tbody>
+    </table>
+</div>
+
+<script>
     const firebaseConfig = {
         apiKey: "AIzaSyA_tUfBWwwKr9gBkVW2wYEEx_gzv2zAfkE",
         databaseURL: "https://abhishek-s-xerox-shop-default-rtdb.firebaseio.com/",
@@ -8,67 +53,69 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database(); 
+    const db = firebase.database();
     const storage = firebase.storage();
 
     async function handleUpload() {
         const file = document.getElementById('fileInput').files[0];
-        if (!file) return alert("Select a file!");
-        document.getElementById('status').innerText = "Uploading...";
-        uploadFile(file, 1); // Default to 1 page for images
-    }
-
-    async function uploadFile(file, pages) {
-        const total = pages * 5;
+        if (!file) return alert("Please select a file!");
+        
+        document.getElementById('status').innerText = "Uploading to Cloud...";
         const jobID = Math.floor(1000 + Math.random() * 9000);
         const fileRef = storage.ref().child('prints/' + jobID + "_" + file.name);
-        
+
         try {
             await fileRef.put(file);
             const url = await fileRef.getDownloadURL();
+            const pages = 1; // Simplify for now
+            const total = pages * 5;
 
-            // Saving to Realtime Database
             await db.ref('orders/' + jobID).set({
-                jobID, name: file.name, pages, total, url,
-                time: Date.now()
+                jobID, name: file.name, pages, total, url, time: Date.now()
             });
 
             document.getElementById('userUI').innerHTML = `
-                <h3 style="color:#10b981">✅ Sent!</h3>
-                <p>Job ID: <b>#${jobID}</b></p>
-                <h2 style="font-size:30px">₹${total}</h2>
-                <button class="btn" onclick="location.reload()">New Print</button>`;
+                <h3 style="color: #10b981">✅ Upload Successful!</h3>
+                <p>Your Job ID is: <b>#${jobID}</b></p>
+                <h2 style="font-size: 40px;">₹${total}</h2>
+                <button class="btn" onclick="location.reload()">Print Another</button>
+            `;
         } catch (e) {
-            alert("Error! Check Rules.");
+            console.error(e);
+            alert("Upload failed. Make sure Realtime Database rules are set to true!");
         }
     }
 
-    if(window.location.search.includes('view=admin')) {
+    if (window.location.search.includes('view=admin')) {
         document.getElementById('userUI').style.display = 'none';
         document.getElementById('adminArea').style.display = 'block';
 
-        db.ref('orders').on('value', snap => {
+        db.ref('orders').on('value', (snapshot) => {
             const body = document.getElementById('queueBody');
             body.innerHTML = "";
-            snap.forEach(child => {
+            snapshot.forEach((child) => {
                 const data = child.val();
                 body.innerHTML += `
                     <tr>
                         <td>#${data.jobID}</td>
                         <td>${data.pages}</td>
-                        <td style="color:green; font-weight:bold;">₹${data.total}</td>
+                        <td>₹${data.total}</td>
                         <td>
-                            <button class="view-btn" onclick="window.open('${data.url}', '_blank')">👁️ View</button>
-                            <button class="done-btn" onclick="deleteJob('${data.jobID}', '${data.jobID}_${data.name}')">✅ Done</button>
+                            <button class="view-btn" onclick="window.open('${data.url}', '_blank')">View</button>
+                            <button class="done-btn" onclick="deleteJob('${data.jobID}', '${data.jobID}_${data.name}')">Done</button>
                         </td>
-                    </tr>`;
+                    </tr>
+                `;
             });
         });
     }
 
     async function deleteJob(id, fileName) {
-        if(confirm("Complete job?")) {
+        if (confirm("Mark as done and delete file?")) {
             await db.ref('orders/' + id).remove();
             await storage.ref().child('prints/' + fileName).delete();
         }
     }
+</script>
+</body>
+</html>
